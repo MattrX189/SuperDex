@@ -1,0 +1,67 @@
+-- ============================================================
+-- SuperDex: Pro whitelist ("comp" Pro for influencers/partners)
+-- ============================================================
+--
+-- Grants full Pro to hand-picked users without payment, managed
+-- entirely from the dashboard. Kept SEPARATE from is_premium_user
+-- (which the app overwrites from RevenueCat on every entitlement
+-- change) so it can never be clobbered by the subscription sync.
+--
+-- Non-destructive: adding a defaulted column leaves all existing
+-- rows untouched (they get `false`) — same pattern as is_hidden
+-- (moderation.sql) and groups.location (groups_update.sql).
+--
+-- HOW TO DEPLOY (dashboard only):
+--   1. Run part 1 below in the SQL editor.
+--   2. Apply the one-line edits in part 2 to the three RPCs whose
+--      bodies live in your project (they aren't recreated here).
+--
+-- HOW TO GRANT / REVOKE Pro to a user:
+--   update public.profiles set whitelisted = true
+--     where user_id = '<uuid>';          -- grant
+--   update public.profiles set whitelisted = false
+--     where user_id = '<uuid>';          -- revoke
+-- (Find the user_id in the profiles table, e.g. by username/email.)
+-- ============================================================
+
+-- 1) ---------------------------------------------------------
+-- The flag. Only ever written from the dashboard; the app reads
+-- it but never writes it.
+alter table public.profiles
+    add column if not exists whitelisted boolean not null default false;
+
+
+-- 2) ---------------------------------------------------------
+-- Make whitelisted users count as premium everywhere OTHER users
+-- see them. These functions' bodies are maintained in your project
+-- (like get_discover_profiles in moderation.sql), so edit them in
+-- the SQL editor rather than recreating them here.
+--
+-- The rule is the same in each: wherever the function currently
+-- reads `p.is_premium_user`, use `(p.is_premium_user or p.whitelisted)`.
+--
+-- (a) get_discover_profiles
+--     • FEED FILTER — so whitelisted influencers appear in Discover:
+--         change   WHERE p.is_premium_user = true
+--         to       WHERE (p.is_premium_user or p.whitelisted) = true
+--       (keep the other predicates, e.g. AND p.is_hidden = false,
+--        AND p.user_id <> requesting_user_id).
+--     • RETURNED COLUMN — so their card shows the PRO badge:
+--         change   p.is_premium_user            as is_premium_user
+--         to       (p.is_premium_user or p.whitelisted) as is_premium_user
+--
+-- (b) get_contact_profiles
+--     • RETURNED COLUMN — PRO badge on contacts:
+--         change   p.is_premium_user            as is_premium_user
+--         to       (p.is_premium_user or p.whitelisted) as is_premium_user
+--
+-- (c) get_profile_by_username
+--     • RETURNED COLUMN — PRO treatment on a shared/opened profile:
+--         change   p.is_premium_user            as is_premium_user
+--         to       (p.is_premium_user or p.whitelisted) as is_premium_user
+--
+-- Nothing else changes. The app already treats the returned
+-- is_premium_user as "effective Pro" for other users, and gates the
+-- signed-in user's own Pro via profile.hasPro (= is_premium_user OR
+-- whitelisted), so no RevenueCat / paywall logic is affected.
+-- ============================================================
