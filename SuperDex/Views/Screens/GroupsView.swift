@@ -38,6 +38,15 @@ struct GroupsView: View {
         return viewModel.groups.filter { HomeViewModel.group($0, matches: trimmedQuery) }
     }
 
+    /// Deck tab only: the same search also finds upcoming events — all of
+    /// them, not just this week's or the selected city/platform.
+    private var matchingEvents: [AppEvent] {
+        guard !showsBackButton, !trimmedQuery.isEmpty else { return [] }
+        return eventsVM.events.filter { $0.matches(trimmedQuery) }
+    }
+
+    private var isSearching: Bool { !trimmedQuery.isEmpty }
+
     var title: String = "Your Decks"
     /// False when shown as a tab root (Deck): uses the large tab header
     /// instead of the back-button top bar.
@@ -62,7 +71,24 @@ struct GroupsView: View {
                             .padding(.bottom, 10)
                     }
 
-                    if viewModel.groups.isEmpty {
+                    // Deck tab: searches decks and events, so it's there
+                    // from the start, before the first deck.
+                    if !showsBackButton || !viewModel.groups.isEmpty {
+                        searchBar
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 6)
+                    }
+
+                    if isSearching {
+                        if !matchingEvents.isEmpty {
+                            searchResultsHeading("Events", count: matchingEvents.count)
+                            eventResults
+                        }
+                        if !visibleGroups.isEmpty && !matchingEvents.isEmpty {
+                            searchResultsHeading("Decks", count: visibleGroups.count)
+                                .padding(.top, 12)
+                        }
+                    } else if viewModel.groups.isEmpty {
                         // Decks for this week's events, then make your
                         // own. "What's a deck?" lives behind the ⓘ button.
                         if showsEventsThisWeek {
@@ -81,23 +107,17 @@ struct GroupsView: View {
                         .padding(.top, showsEventsThisWeek ? sectionGap : 4)
                         .padding(.bottom, 56)
                     } else {
-                        searchBar
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 6)
-
                         if showsEventsThisWeek {
                             eventsThisWeekSection
                                 .padding(.top, 8)
                                 .padding(.bottom, sectionGap - 18)
                         }
 
-                        if trimmedQuery.isEmpty {
-                            sectionHeading("Your decks", subtitle: groupCountText)
-                                .padding(.horizontal, 20)
-                        }
+                        sectionHeading("Your decks", subtitle: groupCountText)
+                            .padding(.horizontal, 20)
                     }
 
-                    if visibleGroups.isEmpty && !trimmedQuery.isEmpty {
+                    if isSearching && visibleGroups.isEmpty && matchingEvents.isEmpty {
                         noResults
                     }
 
@@ -217,7 +237,7 @@ struct GroupsView: View {
             TextField(
                 "",
                 text: $searchText,
-                prompt: Text("Search decks, members, places")
+                prompt: Text(showsBackButton ? "Search decks, members, places" : "Search decks, people, events")
                     .font(.gilroy(.regular, size: 15))
                     .foregroundColor(.white.opacity(0.55))
             )
@@ -263,7 +283,9 @@ struct GroupsView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.4))
-            Text("No decks match \"\(trimmedQuery)\"")
+            Text(showsBackButton
+                 ? "No decks match \"\(trimmedQuery)\""
+                 : "No decks or events match \"\(trimmedQuery)\"")
                 .font(.gilroy(.semiBold, size: 15))
                 .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
@@ -271,6 +293,42 @@ struct GroupsView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 48)
         .padding(.horizontal, 20)
+    }
+
+    // MARK: - Search results
+
+    private func searchResultsHeading(_ title: String, count: Int) -> some View {
+        HStack(spacing: 8) {
+            Text(title.uppercased())
+                .font(.gilroy(.semiBold, size: 12))
+                .tracking(1.8)
+                .foregroundStyle(.white.opacity(0.55))
+            Text("\(count)")
+                .font(.gilroy(.semiBold, size: 12))
+                .foregroundStyle(.white.opacity(0.35))
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 4)
+    }
+
+    /// Matching events, each with the same Create / Open deck button as
+    /// the This Week carousel. Tapping the card opens the event page.
+    private var eventResults: some View {
+        LazyVStack(spacing: 16) {
+            ForEach(matchingEvents) { event in
+                VStack(spacing: 10) {
+                    NavigationLink(value: event) {
+                        EventCardView(event: event)
+                    }
+                    .buttonStyle(GroupCardPressStyle())
+
+                    weekEventAction(for: event)
+                        .padding(.horizontal, 8)
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
     }
 
     // MARK: - Happening this week

@@ -118,8 +118,9 @@ struct SwipeActionRow<Content: View>: View {
 // MARK: - Horizontal Pan
 
 /// Pan recognizer that refuses to begin unless the initial movement is
-/// mostly horizontal, so vertical drags fall through to the ScrollView.
-private struct HorizontalPanGesture: UIGestureRecognizerRepresentable {
+/// mostly horizontal, so vertical drags fall through to the ScrollView
+/// (or a sheet's swipe-to-dismiss). Also drives ProfileCardView's flip.
+struct HorizontalPanGesture: UIGestureRecognizerRepresentable {
     let onChanged: (CGFloat) -> Void
     let onEnded: (CGFloat, CGFloat) -> Void
 

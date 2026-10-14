@@ -201,6 +201,17 @@ struct AppEvent: Identifiable, Hashable {
 }
 
 extension AppEvent {
+    /// Search match on name, venue, city, category and platform. Every
+    /// word must appear somewhere, so "ai bengaluru" narrows rather than widens.
+    func matches(_ query: String) -> Bool {
+        let words = query.lowercased().split(whereSeparator: \.isWhitespace)
+        guard !words.isEmpty else { return true }
+        let haystack = [title, venue ?? "", city, category.displayName, source.displayName]
+            .joined(separator: " ")
+            .lowercased()
+        return words.allSatisfy { haystack.contains($0) }
+    }
+
     /// A small rendition of imageURL for 64pt list thumbnails. The
     /// event sites serve multi-hundred-KB originals; where the CDN
     /// supports resizing, rewrite the URL to a ~200px variant so list

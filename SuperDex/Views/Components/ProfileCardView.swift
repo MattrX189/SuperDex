@@ -31,9 +31,6 @@ struct ProfileCardView: View {
     @State private var lastTranslation: CGFloat = 0
     @State private var haptics = FlipHaptics()
     @State private var hasSpun = false
-    /// Decided on a drag's first movement: vertical drags aren't flips
-    /// (they belong to whatever contains the card — scrolling, onboarding's pull).
-    @State private var isVerticalDrag: Bool?
 
     private let cornerRadius: CGFloat = 32
 
@@ -83,60 +80,59 @@ struct ProfileCardView: View {
         )
         .scaleEffect(isDragging ? 0.97 : 1.0)
         .animation(.easeOut(duration: 0.2), value: isDragging)
-        .gesture(flipGesture, including: allowsFlip ? .all : .subviews)
+        .modifier(FlipGestureModifier(isEnabled: allowsFlip, onChanged: flipChanged, onEnded: flipEnded))
     }
 
-    private var flipGesture: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { value in
-                if isVerticalDrag == nil {
-                    isVerticalDrag = abs(value.translation.height) > abs(value.translation.width)
-                }
-                guard isVerticalDrag == false else { return }
-                if !isDragging {
-                    isDragging = true
-                    gestureBase = rotation
-                    lastQuarter = Int((rotation / 90).rounded(.down))
-                    lastTranslation = 0
-                    haptics.prepare()
-                }
+    // MARK: - Flip Gesture
 
-                // Horizontal drag drives Y rotation. ~2.4px per degree.
-                let newRotation = gestureBase + Double(value.translation.width) / 2.4
-                rotation = newRotation
+    // A UIKit pan that only begins for horizontal drags. A SwiftUI
+    // DragGesture claims vertical drags too, so swiping down on the card
+    // couldn't scroll its container or close the sheet it's in.
+    private func flipChanged(_ translation: CGFloat) {
+        if !isDragging {
+            isDragging = true
+            gestureBase = rotation
+            lastQuarter = Int((rotation / 90).rounded(.down))
+            lastTranslation = 0
+            haptics.prepare()
+        }
 
-                // Speed → haptic intensity
-                let delta = value.translation.width - lastTranslation
-                lastTranslation = value.translation.width
-                let speed = min(abs(delta) / 14.0, 1.0)
-                let intensity = CGFloat(0.45 + speed * 0.55)
+        // Horizontal drag drives Y rotation. ~2.4px per degree.
+        let newRotation = gestureBase + Double(translation) / 2.4
+        rotation = newRotation
 
-                // Fire a tick each time we cross a 90° boundary.
-                let quarter = Int((newRotation / 90).rounded(.down))
-                if quarter != lastQuarter {
-                    // Even boundaries (0,180,…) land flat → soft; odd (90,270,…) edge-on → crisp.
-                    if abs(quarter) % 2 == 0 {
-                        haptics.tick(intensity: intensity)
-                    } else {
-                        haptics.edge(intensity: intensity)
-                    }
-                    lastQuarter = quarter
-                }
+        // Speed → haptic intensity
+        let delta = translation - lastTranslation
+        lastTranslation = translation
+        let speed = min(abs(delta) / 14.0, 1.0)
+        let intensity = CGFloat(0.45 + speed * 0.55)
+
+        // Fire a tick each time we cross a 90° boundary.
+        let quarter = Int((newRotation / 90).rounded(.down))
+        if quarter != lastQuarter {
+            // Even boundaries (0,180,…) land flat → soft; odd (90,270,…) edge-on → crisp.
+            if abs(quarter) % 2 == 0 {
+                haptics.tick(intensity: intensity)
+            } else {
+                haptics.edge(intensity: intensity)
             }
-            .onEnded { value in
-                defer { isVerticalDrag = nil }
-                guard isVerticalDrag == false else { return }
-                isDragging = false
+            lastQuarter = quarter
+        }
+    }
 
-                // Carry momentum, then snap to the nearest face (multiple of 180°).
-                let predicted = gestureBase + Double(value.predictedEndTranslation.width) / 2.4
-                let snapped = (predicted / 180).rounded() * 180
+    private func flipEnded(_ translation: CGFloat, _ velocity: CGFloat) {
+        guard isDragging else { return }
+        isDragging = false
 
-                withAnimation(.spring(response: 0.55, dampingFraction: 0.72)) {
-                    rotation = snapped
-                }
-                haptics.snap()
-            }
+        // Carry momentum, then snap to the nearest face (multiple of 180°).
+        // Roughly where SwiftUI's predictedEndTranslation would land.
+        let predicted = gestureBase + Double(translation + velocity * 0.2) / 2.4
+        let snapped = (predicted / 180).rounded() * 180
+
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.72)) {
+            rotation = snapped
+        }
+        haptics.snap()
     }
 
     // MARK: - Intro Spin
@@ -650,5 +646,23 @@ extension View {
         self
             .aspectRatio(ProfileCardLayout.aspectRatio, contentMode: .fit)
             .padding(.horizontal, ProfileCardLayout.screenInset - containerPadding)
+    }
+}
+
+// MARK: - Flip Gesture Modifier
+
+/// Attaches the horizontal-only flip pan when flipping is allowed. Taps on
+/// the card's buttons are unaffected either way.
+private struct FlipGestureModifier: ViewModifier {
+    let isEnabled: Bool
+    let onChanged: (CGFloat) -> Void
+    let onEnded: (CGFloat, CGFloat) -> Void
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.gesture(HorizontalPanGesture(onChanged: onChanged, onEnded: onEnded))
+        } else {
+            content
+        }
     }
 }

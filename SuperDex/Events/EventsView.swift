@@ -29,6 +29,18 @@ struct EventsScreen: View {
     @Environment(UserProfileViewModel.self) private var profileVM
     @Environment(\.dismiss) private var dismiss
     @State private var selectedEvent: AppEvent?
+    @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
+
+    private var trimmedQuery: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The chips and city/platform filters, then the search on top.
+    private var visibleEvents: [AppEvent] {
+        guard !trimmedQuery.isEmpty else { return viewModel.filteredEvents }
+        return viewModel.filteredEvents.filter { $0.matches(trimmedQuery) }
+    }
 
     var body: some View {
         ZStack {
@@ -40,6 +52,9 @@ struct EventsScreen: View {
                     navBar
                         .padding(.horizontal, 20)
                         .padding(.top, 4)
+
+                    searchBar
+                        .padding(.horizontal, 16)
 
                     categoryChips
 
@@ -56,6 +71,7 @@ struct EventsScreen: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollDismissesKeyboard(.interactively)
             .refreshable {
                 await viewModel.load()
             }
@@ -108,6 +124,59 @@ struct EventsScreen: View {
 
                 Spacer()
             }
+        }
+    }
+
+    // MARK: - Search
+
+    /// Same look as the Deck tab's search bar.
+    private var searchBar: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.7))
+
+            TextField(
+                "",
+                text: $searchText,
+                prompt: Text("Search events, venues, cities")
+                    .font(.gilroy(.regular, size: 15))
+                    .foregroundColor(.white.opacity(0.55))
+            )
+            .font(.gilroy(.regular, size: 16))
+            .foregroundStyle(.white)
+            .tint(.white)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .submitLabel(.search)
+            .focused($isSearchFocused)
+
+            if !searchText.isEmpty {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(isSearchFocused ? 0.10 : 0.06))
+        )
+        .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
+        .animation(.easeInOut(duration: 0.18), value: isSearchFocused)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: searchText.isEmpty)
+        .contentShape(Capsule(style: .continuous))
+        .onTapGesture {
+            isSearchFocused = true
         }
     }
 
@@ -305,12 +374,12 @@ struct EventsScreen: View {
 
     @ViewBuilder
     private var eventsList: some View {
-        if viewModel.filteredEvents.isEmpty && !viewModel.isLoading {
+        if visibleEvents.isEmpty && !viewModel.isLoading {
             emptyState
                 .padding(.top, 30)
         } else {
             LazyVStack(spacing: 16) {
-                ForEach(viewModel.filteredEvents) { event in
+                ForEach(visibleEvents) { event in
                     Button {
                         selectedEvent = event
                     } label: {
@@ -328,11 +397,14 @@ struct EventsScreen: View {
                 .font(.system(size: 34, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.55))
 
-            Text("No events found")
+            Text(trimmedQuery.isEmpty ? "No events found" : "No events match \"\(trimmedQuery)\"")
                 .font(.gilroy(.semiBold, size: 16))
                 .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
 
-            Text("Try a different category, city or platform, or pull down to refresh.")
+            Text(trimmedQuery.isEmpty
+                 ? "Try a different category, city or platform, or pull down to refresh."
+                 : "Try another word, or set the category, city and platform filters to All.")
                 .font(.gilroy(.regular, size: 13))
                 .foregroundStyle(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
