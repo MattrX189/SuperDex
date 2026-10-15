@@ -14,7 +14,7 @@ import UIKit
 enum InviteService {
 
     // TODO: replace with the live App Store listing once SuperDex ships.
-    static let appStoreURL = "https://apps.apple.com/app/superdex"
+    static let appStoreURL = "https://apps.apple.com/us/app/superdex-future-of-networking/id6763406576"
 
     static func message(for name: String, from senderName: String) -> String {
         let greeting = name.isEmpty ? "Hey" : "Hey \(name.split(separator: " ").first.map(String.init) ?? name)"

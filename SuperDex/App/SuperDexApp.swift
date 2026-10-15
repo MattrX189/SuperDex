@@ -138,11 +138,15 @@ struct CategoryCardsApp: App {
         case .signedOut:
             GetStartedCarouselView()
         case .signedIn:
-            if userProfile.needsOnboarding {
+            if !userProfile.hasLoadedProfile {
+                // Wait for the profile so we know whether it's onboarding
+                // or Home — otherwise Home flashes up first.
+                Color.black
+            } else if userProfile.needsOnboarding {
                 OnboardingView()
             } else if userProfile.needsThemeRefresh {
-                // Returning account: theme picker, then the card launch.
-                OnboardingView(startStep: .theme, isReturning: true)
+                // Returning account: notifications, theme picker, then the card launch.
+                OnboardingView(startStep: .notifications, isReturning: true)
             } else {
                 ContentView()
             }

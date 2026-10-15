@@ -97,10 +97,11 @@ struct ContentView: View {
         .sheet(isPresented: $notifications.isPresented) {
             NotificationsSheet()
         }
-        // Push notifications: ask once the user is in the app (here = signed
-        // in and onboarded), and open the feed when a push is tapped.
+        // Push notifications: the permission prompt lives on the onboarding
+        // notifications step; here we only re-register (tokens can change),
+        // and open the feed when a push is tapped.
         .task {
-            await PushNotificationManager.shared.requestAuthorizationAndRegister()
+            await PushNotificationManager.shared.requestAuthorizationAndRegister(prompt: false)
         }
         // Waits for the splash on a cold launch from a push, so the sheet
         // doesn't open over the splash video.

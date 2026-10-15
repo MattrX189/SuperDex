@@ -2,7 +2,8 @@
 //  EventsCarousel.swift
 //  SuperDex
 //
-//  Paged carousel of large square event cards that auto-advances.
+//  Paged carousel of large square event cards that auto-advances in an
+//  endless left-to-right loop.
 //  Shared by Home ("Upcoming events") and Deck ("Happening this week");
 //  `footer` adds per-event content under each card (e.g. Deck's
 //  "Create deck" button).
@@ -14,14 +15,22 @@ struct EventsCarousel<Footer: View>: View {
     let events: [AppEvent]
     @ViewBuilder var footer: (AppEvent) -> Footer
 
-    @State private var currentEventID: String?
+    /// Index into `slots`. The events are laid out three times over so the
+    /// carousel can keep moving right forever: whenever it settles in the
+    /// first or last copy it jumps, unanimated, to the same card in the
+    /// middle copy.
+    @State private var position: Int?
     @State private var lastInteraction = Date.distantPast
+
+    private var copies: Int { events.count > 1 ? 3 : 1 }
+    private var slotCount: Int { events.count * copies }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             // Top-aligned: titles wrap to different heights.
             LazyHStack(alignment: .top, spacing: 14) {
-                ForEach(events) { event in
+                ForEach(0..<slotCount, id: \.self) { slot in
+                    let event = events[slot % events.count]
                     VStack(spacing: 14) {
                         NavigationLink(value: event) {
                             EventSquareCard(event: event)
@@ -36,40 +45,58 @@ struct EventsCarousel<Footer: View>: View {
                             .scaleEffect(phase.isIdentity ? 1 : 0.88)
                             .opacity(phase.isIdentity ? 1 : 0.5)
                     }
-                    .id(event.id)
                 }
             }
             .scrollTargetLayout()
         }
         .scrollTargetBehavior(.viewAligned)
-        .scrollPosition(id: $currentEventID)
+        .scrollPosition(id: $position)
         .safeAreaPadding(.horizontal, 40)
         .scrollClipDisabled()
         .onScrollPhaseChange { _, phase in
             if phase == .interacting || phase == .tracking {
                 lastInteraction = .now
             }
+            if phase == .idle {
+                recenter()
+            }
         }
         .task(id: events.map(\.id)) {
+            jump(to: copies > 1 ? events.count : 0)
             await autoScroll()
         }
     }
 
-    /// Advances one card every few seconds (left → right), wrapping to the
-    /// start. Pauses briefly after the user swipes the carousel themselves.
+    /// Advances one card every few seconds, always left → right, looping
+    /// endlessly. Pauses briefly after the user swipes the carousel themselves.
     private func autoScroll() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(3.5))
             guard !Task.isCancelled else { return }
-            let ids = events.map(\.id)
-            guard ids.count > 1,
+            guard events.count > 1,
                   Date.now.timeIntervalSince(lastInteraction) > 5 else { continue }
-            let current = currentEventID.flatMap { ids.firstIndex(of: $0) } ?? 0
-            let next = (current + 1) % ids.count
+            recenter()
+            let next = min((position ?? events.count) + 1, slotCount - 1)
             withAnimation(.smooth(duration: 0.6)) {
-                currentEventID = ids[next]
+                position = next
             }
         }
+    }
+
+    /// Moves from the outer copies back to the identical card in the middle
+    /// copy, so there's always room to keep scrolling either way.
+    private func recenter() {
+        guard copies > 1, let position else { return }
+        let count = events.count
+        if position < count || position >= 2 * count {
+            jump(to: count + position % count)
+        }
+    }
+
+    private func jump(to slot: Int) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { position = slot }
     }
 }
 
@@ -176,12 +203,14 @@ struct EventSquareCard: View {
     }
 
     private func detailLine(icon: String, text: String) -> some View {
-        HStack(spacing: 6) {
+        // Long venues wrap to a second line instead of being cut off.
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .semibold))
             Text(text)
                 .font(.gilroy(.medium, size: 14))
-                .lineLimit(1)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(.white.opacity(0.6))
     }

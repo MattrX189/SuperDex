@@ -478,7 +478,7 @@ struct UserProfileView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.left.forwardslash.chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                    Text("Version 1.1.1")
+                    Text("Version 1.1.2")
                         .font(.gilroy(.semiBold, size: 13))
                 }
                 .foregroundStyle(Color.white.opacity(0.45))

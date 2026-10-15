@@ -15,6 +15,9 @@ final class UserProfileViewModel {
     var isLoading = false
     var errorMessage: String?
     var needsOnboarding = false
+    /// False until the signed-in user's profile has been fetched, so the
+    /// root doesn't flash Home before deciding on onboarding.
+    var hasLoadedProfile = false
     /// An existing account signing back in: show the theme picker and the
     /// card launch again before Home.
     var needsThemeRefresh = false
@@ -32,7 +35,10 @@ final class UserProfileViewModel {
 
         currentUserId = user.id
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            hasLoadedProfile = true
+        }
 
         do {
             if let remote = try await service.fetch(userId: user.id) {
@@ -84,6 +90,7 @@ final class UserProfileViewModel {
         saveTask = nil
         currentUserId = nil
         profile = UserProfileData()
+        hasLoadedProfile = false
         needsOnboarding = false
         needsThemeRefresh = false
     }

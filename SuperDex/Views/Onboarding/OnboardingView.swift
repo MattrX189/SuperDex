@@ -9,7 +9,7 @@ struct OnboardingView: View {
     @Environment(UserProfileViewModel.self) private var viewModel
     @State private var step: Step
 
-    enum Step { case profile, theme, ready }
+    enum Step { case profile, notifications, theme, ready }
 
     /// When set, called at the end instead of completing (and saving)
     /// onboarding — used by DebugFlags.onboardingPreview.
@@ -32,6 +32,10 @@ struct OnboardingView: View {
             switch step {
             case .profile:
                 OnboardingProfileStep(accent: accent) {
+                    withAnimation(.easeInOut(duration: 0.3)) { step = .notifications }
+                }
+            case .notifications:
+                OnboardingNotificationsStep(accent: accent) {
                     withAnimation(.easeInOut(duration: 0.3)) { step = .theme }
                 }
             case .theme:

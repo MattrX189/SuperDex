@@ -18,6 +18,10 @@ struct EventsView: View {
     var body: some View {
         NavigationStack {
             EventsScreen(viewModel: viewModel)
+                // Home and Deck register this on their own stacks.
+                .navigationDestination(for: AppEvent.self) { event in
+                    EventDetailView(event: event)
+                }
         }
     }
 }
@@ -27,8 +31,8 @@ struct EventsScreen: View {
     var showsBackButton = false
 
     @Environment(UserProfileViewModel.self) private var profileVM
+    @Environment(SubscriptionManager.self) private var subscription
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedEvent: AppEvent?
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
 
@@ -49,9 +53,18 @@ struct EventsScreen: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
-                    navBar
-                        .padding(.horizontal, 20)
-                        .padding(.top, 4)
+                    // Same large header whether it's the tab or pushed from
+                    // Home; the pushed one gets a "Home" button on the right,
+                    // where the other tabs keep their header actions.
+                    HStack(alignment: .top, spacing: 16) {
+                        tabHeader
+                        if showsBackButton {
+                            homeButton
+                                .padding(.top, 16)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
 
                     searchBar
                         .padding(.horizontal, 16)
@@ -65,9 +78,10 @@ struct EventsScreen: View {
                             .padding(.horizontal, 22)
                     }
 
+                    // Carousels run edge to edge like Home's; headings and
+                    // the empty state pad themselves.
                     eventsList
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 56)
+                        .padding(.bottom, 120)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -81,9 +95,6 @@ struct EventsScreen: View {
             }
         }
         .navigationBarHidden(true)
-        .navigationDestination(item: $selectedEvent) { event in
-            EventDetailView(event: event)
-        }
         .task {
             RegisteredEventsStore.shared.activate(userId: profileVM.currentUserId)
             await viewModel.loadIfNeeded()
@@ -99,32 +110,42 @@ struct EventsScreen: View {
         }
     }
 
-    // MARK: - Nav bar (chevron left, title centered inline)
+    // MARK: - Tab header
 
-    private var navBar: some View {
-        ZStack {
+    /// Large header matching the other tab roots (Home, Deck, Contacts, Discover).
+    private var tabHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image((subscription.isPro || profileVM.profile.hasPro) ? "SuperDexProText" : "SuperDexText")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 14)
+
             Text("Events")
-                .font(.gilroy(.bold, size: 20))
+                .font(.gilroy(.bold, size: 42))
                 .foregroundStyle(.white)
-
-            HStack {
-                if showsBackButton {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 42, height: 42)
-                            .contentShape(Circle())
-                            .glassEffect(.regular.interactive(), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Spacer()
-            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var homeButton: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            dismiss()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "house.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("Home")
+                    .font(.gilroy(.semiBold, size: 15))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .frame(height: 40)
+            .contentShape(Capsule())
+            .glassEffect(.clear.interactive(), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Back to Home")
     }
 
     // MARK: - Search
@@ -376,19 +397,59 @@ struct EventsScreen: View {
     private var eventsList: some View {
         if visibleEvents.isEmpty && !viewModel.isLoading {
             emptyState
+                .padding(.horizontal, 20)
                 .padding(.top, 30)
         } else {
-            LazyVStack(spacing: 16) {
-                ForEach(visibleEvents) { event in
-                    Button {
-                        selectedEvent = event
-                    } label: {
-                        EventCardView(event: event)
+            // One Home-style carousel per month.
+            LazyVStack(alignment: .leading, spacing: 36) {
+                ForEach(monthSections, id: \.title) { section in
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Same section-title style as Home's "Upcoming events".
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(section.title)
+                                .font(.gilroy(.bold, size: 20))
+                                .foregroundStyle(.white)
+                            Spacer()
+                            Text("\(section.events.count) event\(section.events.count == 1 ? "" : "s")")
+                                .font(.gilroy(.medium, size: 13))
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                        .padding(.horizontal, 20)
+
+                        EventsCarousel(events: section.events)
                     }
-                    .buttonStyle(GroupCardPressStyle())
                 }
             }
+            .padding(.top, 4)
         }
+    }
+
+    /// `visibleEvents` grouped by start month, soonest first ("October",
+    /// or "January 2027" outside this year); undated events go last.
+    private var monthSections: [(title: String, events: [AppEvent])] {
+        let calendar = Calendar.current
+        let dated = visibleEvents
+            .filter { $0.startDate != nil }
+            .sorted { $0.startDate! < $1.startDate! }
+        let undated = visibleEvents.filter { $0.startDate == nil }
+
+        var sections: [(title: String, events: [AppEvent])] = []
+        let thisYear = calendar.component(.year, from: .now)
+        for event in dated {
+            let date = event.startDate!
+            let title = calendar.component(.year, from: date) == thisYear
+                ? date.formatted(.dateTime.month(.wide))
+                : date.formatted(.dateTime.month(.wide).year())
+            if sections.last?.title == title {
+                sections[sections.count - 1].events.append(event)
+            } else {
+                sections.append((title, [event]))
+            }
+        }
+        if !undated.isEmpty {
+            sections.append(("Date to be announced", undated))
+        }
+        return sections
     }
 
     private var emptyState: some View {

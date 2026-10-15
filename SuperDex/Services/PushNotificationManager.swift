@@ -41,12 +41,14 @@ final class PushNotificationManager: NSObject {
     // MARK: - Permission & registration
 
     /// Shows the system prompt the first time; afterwards just re-registers
-    /// (tokens can change), so it's safe to call on every launch.
-    func requestAuthorizationAndRegister() async {
+    /// (tokens can change), so it's safe to call on every launch. With
+    /// `prompt: false` it never shows the prompt — only re-registers.
+    func requestAuthorizationAndRegister(prompt: Bool = true) async {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
         switch settings.authorizationStatus {
         case .notDetermined:
+            guard prompt else { return }
             let granted = (try? await center.requestAuthorization(options: [.alert, .badge, .sound])) ?? false
             #if DEBUG
             print("[Push] permission \(granted ? "granted" : "denied")")

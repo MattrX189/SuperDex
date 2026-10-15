@@ -153,33 +153,7 @@ struct GroupsView: View {
         .background(AppBackground())
         .navigationBarHidden(true)
         .sheet(isPresented: $showsDeckInfo) {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 26) {
-                    firstDeckGuide(.intro)
-
-                    // Same "Got it" as the Contacts ⓘ sheet.
-                    Button {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        showsDeckInfo = false
-                    } label: {
-                        Text("Got it")
-                            .font(.gilroy(.semiBold, size: 16))
-                            .foregroundStyle(.black)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 17)
-                            .background(
-                                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                    .fill(.white)
-                            )
-                    }
-                    .buttonStyle(GroupCardPressStyle())
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 32)
-                .padding(.bottom, 24)
-            }
-            .presentationDetents([.fraction(0.72), .large])
-            .presentationDragIndicator(.visible)
+            DeckInfoSheet()
         }
         .task {
             guard !showsBackButton else { return }
@@ -448,37 +422,7 @@ struct GroupsView: View {
     /// `.howTo` is shown instead of the search bar + list until the user
     /// has a deck; `.intro` ("what's a deck") is the ⓘ sheet by the title.
     private func firstDeckGuide(_ part: EmptyStateGuide.Part) -> some View {
-        EmptyStateGuide(
-            icon: "person.2.fill",
-            accent: .indigo,
-            title: "Decks are stacks of people",
-            subtitle: "Organize the people you meet into Decks based on their job roles, companies, skills, or events.\n\nWith Decks, everyone is in one place. Easily find connections, explore their latest profiles, and stay up to date with their details, so you never lose track of someone important.",
-            steps: [
-                .init(
-                    icon: "plus",
-                    title: "Create a deck",
-                    detail: "Tap the + button and give it a name, like \u{201C}Design Meetup\u{201D}."
-                ),
-                .init(
-                    icon: "calendar.badge.clock",
-                    title: "Add the details",
-                    detail: "Optionally set a date, location, link, and a cover photo."
-                ),
-                .init(
-                    icon: "person.2.fill",
-                    title: "Add people",
-                    detail: "Pick from your contacts, or scan someone's SuperDex QR to add them straight in."
-                ),
-                .init(
-                    icon: "magnifyingglass",
-                    title: "Find them later",
-                    detail: "Search your decks by name, member, or place whenever you need to reconnect."
-                )
-            ],
-            primaryTitle: "Create a Deck",
-            primaryAction: { viewModel.prepareNewGroup() },
-            part: part
-        )
+        EmptyStateGuide.deck(part, onCreate: { viewModel.prepareNewGroup() })
     }
 
     private var groupCountText: String {
@@ -499,18 +443,7 @@ struct GroupsView: View {
                         .font(.gilroy(.bold, size: 42))
                         .foregroundStyle(.white)
 
-                    Button {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        showsDeckInfo = true
-                    } label: {
-                        Image(systemName: "info.circle")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.6))
-                            .frame(width: 32, height: 32)
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("What is a deck?")
+                    DeckInfoButton { showsDeckInfo = true }
                 }
 
 //                Text(groupCountText)

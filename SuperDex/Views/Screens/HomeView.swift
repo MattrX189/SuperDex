@@ -19,6 +19,7 @@ struct HomeView: View {
     @State private var showQRSheet = false
     @State private var showViewersSheet = false
     @State private var showEditProfile = false
+    @State private var showsDeckInfo = false
     /// Pops the My Card tile when the onboarding card genies into it.
     @State private var myCardPop = false
     /// The My Card tile on screen, so the onboarding card can land on it.
@@ -110,6 +111,7 @@ struct HomeView: View {
                         .padding(.bottom, 120)
                     }
                 }
+                .scrollIndicators(.hidden)
                 .reportsTopScroll()
 
             }
@@ -169,6 +171,9 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showViewersSheet) {
                 ProfileViewersSheet()
+            }
+            .sheet(isPresented: $showsDeckInfo) {
+                DeckInfoSheet()
             }
             .sheet(isPresented: $showEditProfile) {
                 HomeEditProfileSheet()
@@ -748,7 +753,8 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader(
                 title: "Your decks",
-                route: viewModel.groups.isEmpty ? nil : .allGroups
+                route: viewModel.groups.isEmpty ? nil : .allGroups,
+                onInfo: { showsDeckInfo = true }
             )
 
             if viewModel.groups.isEmpty {
@@ -773,11 +779,18 @@ struct HomeView: View {
         }
     }
 
-    private func sectionHeader(title: String, route: HomeRoute?) -> some View {
+    private func sectionHeader(title: String, route: HomeRoute?, onInfo: (() -> Void)? = nil) -> some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(title)
-                .font(.gilroy(.bold, size: 20))
-                .foregroundStyle(.white)
+            HStack(alignment: .center, spacing: 4) {
+                Text(title)
+                    .font(.gilroy(.bold, size: 20))
+                    .foregroundStyle(.white)
+
+                if let onInfo {
+                    DeckInfoButton(size: 16, action: onInfo)
+                        .frame(height: 20)
+                }
+            }
 
             Spacer()
 
